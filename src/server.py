@@ -53,6 +53,7 @@ from .utils import (
 
 import gradio 
 from .autohint_config_page.app import create_config_interface
+from .autohint_prompter import hint_elements_to_prompt
 
 logging.basicConfig(level=os.environ.get('LOGLEVEL', 'INFO').upper())
 logger = logging.getLogger(__name__)
@@ -1007,6 +1008,215 @@ async def document_search(request: Request, data: DocumentSearch) -> Dict[str, L
         return JSONResponse(content={"message": "Error occurred while searching documents."}, status_code=500)
     
 
+# -------------------------
+# 1. A model that does NOT include `messages`,
+#    but includes everything else needed downstream.
+# -------------------------
+class HintOnlyPrompt(BaseModel):
+    hint_elements: List[Dict[str, Any]] = Field(
+        ...,
+        description="List of hint element dictionaries that the LLM can use to generate a helpful hint."
+    )
+    use_knowledge_base: bool = Field(
+        default=False,
+        description="Whether to use a knowledge base for generating the hint"
+    )
+    temperature: float = Field(
+        0.2,
+        description="Sampling temperature for text generation",
+        ge=0.1,
+        le=1.0
+    )
+    top_p: float = Field(
+        0.7,
+        description="Top-p (nucleus) sampling value for text generation",
+        ge=0.1,
+        le=1.0
+    )
+    max_tokens: int = Field(
+        1024,
+        description="Maximum tokens to generate",
+        ge=0,
+        le=1024,
+        format="int64"
+    )
+    top_k: int = Field(
+        default=int(os.getenv("APP_RETRIEVER_TOPK", 4)),
+        description="Max number of documents to retrieve if use_knowledge_base=True",
+        ge=0,
+        le=25,
+        format="int64"
+    )
+    collection_name: str = Field(
+        default=os.getenv("COLLECTION_NAME", ""),
+        description="Name of collection to be used for inference",
+        max_length=4096,
+        pattern=r'[\s\S]*'
+    )
+    model: str = Field(
+        default=os.getenv("APP_LLM_MODELNAME", ""),
+        description="Name of the LLM model to use for inference",
+        max_length=4096,
+        pattern=r'[\s\S]*'
+    )
+    stop: List[constr(max_length=256)] = Field(
+        default=[],
+        description="Tokens at which to stop generation"
+    )
+
+    @validator('use_knowledge_base')
+    @classmethod
+    def sanitize_use_kb(cls, v):
+        """Sanitize user-supplied boolean (pydantic automatically enforces bool, but just to match existing style)."""
+        v = bleach.clean(str(v), strip=True)
+        try:
+            return {"True": True, "False": False}[v]
+        except KeyError as e:
+            raise ValueError("use_knowledge_base must be a boolean value") from e
+
+
+# -------------------------
+# 2. The new endpoint, which constructs
+#    a single user message from the hint elements
+#    and streams a response exactly like /generate.
+# -------------------------
+@app.post(
+    "/generate_hint",
+    tags=["RAG APIs"],
+    response_model=ChainResponse,
+    responses={
+        500: {
+            "description": "Internal Server Error",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Internal server error occurred"}
+                }
+            },
+        }
+    },
+)
+async def generate_hint(_: Request, hint_prompt: HintOnlyPrompt) -> StreamingResponse:
+    """
+    Accepts hint_elements plus typical generation parameters (like temperature, top_p, etc.).
+    Constructs a single user message from the hint_elements and generates a hint
+    in streaming fashion, just like /generate.
+    """
+    try:
+        # Use your utility function to turn hint elements into a specialized prompt
+        hint_context = hint_elements_to_prompt(hint_prompt.hint_elements)
+
+        #log the hint context
+        logger.info("Hint context: %s", hint_context)
+
+        # We then treat that entire hint context as if it's the user's single message
+        # so that it flows through the existing chain logic.
+        # Here, we build a single 'user' message inline:
+        fake_user_message = Message(role="user", content=hint_context)
+
+        # Collect all LLM settings from the incoming request
+        llm_settings = {
+            "temperature": hint_prompt.temperature,
+            "top_p": hint_prompt.top_p,
+            "max_tokens": hint_prompt.max_tokens,
+            # "stop": hint_prompt.stop,
+        }
+        # (We won't store them in Prompt, but we'll pass them to rag_chain or llm_chain.)
+
+        # Decide which chain to call (RAG or plain LLM)
+        example = app.example()
+        if hint_prompt.use_knowledge_base:
+            logger.info("Using knowledge base (rag_chain) for /generate_hint.")
+            generator = example.rag_chain(
+                query=fake_user_message.content,
+                chat_history=[],  # We have no prior conversation, so pass empty
+                top_n=hint_prompt.top_k,
+                collection_name=hint_prompt.collection_name,
+                **llm_settings
+            )
+        else:
+            logger.info("Using plain LLM (llm_chain) for /generate_hint.")
+            generator = example.llm_chain(
+                query=fake_user_message.content,
+                chat_history=[],
+                **llm_settings
+            )
+
+        # -------------------------
+        # Streaming response
+        # -------------------------
+        def response_generator():
+            resp_id = str(uuid4())
+            if generator:
+                for chunk in generator:
+                    chain_response = ChainResponse()
+                    response_choice = ChainResponseChoices(
+                        index=0,
+                        message=Message(role="assistant", content=chunk),
+                        delta=Message(role=None, content=chunk),
+                        finish_reason=None
+                    )
+                    chain_response.id = resp_id
+                    chain_response.choices.append(response_choice)
+                    chain_response.model = hint_prompt.model
+                    chain_response.object = "chat.completion.chunk"
+                    chain_response.created = int(time.time())
+                    yield "data: " + chain_response.json() + "\n\n"
+
+                # After all chunks, send a final done event
+                chain_response = ChainResponse()
+                response_choice = ChainResponseChoices(finish_reason="stop")
+                chain_response.id = resp_id
+                chain_response.choices.append(response_choice)
+                chain_response.model = hint_prompt.model
+                chain_response.object = "chat.completion.chunk"
+                chain_response.created = int(time.time())
+                yield "data: " + chain_response.json() + "\n\n"
+            else:
+                # If no generator, yield an empty response
+                chain_response = ChainResponse()
+                yield "data: " + chain_response.json() + "\n\n"
+
+        return StreamingResponse(response_generator(), media_type="text/event-stream")
+
+    except (MilvusException, MilvusUnavailableException) as e:
+        exception_msg = (
+            "Error from Milvus server in /generate_hint. "
+            "Check your vector store configuration or ingestion."
+        )
+        logger.error("Milvus error in /generate_hint: %s", e)
+        return _stream_error_response(hint_prompt.model, exception_msg)
+
+    except Exception as e:
+        exception_msg = "Error in /generate_hint. Check server logs for details."
+        logger.error("General error in /generate_hint: %s", e)
+        return _stream_error_response(hint_prompt.model, exception_msg)
+
+
+# -------------------------
+# 3. Helper to produce a short SSE error response
+#    so we always conform to the streaming contract.
+# -------------------------
+def _stream_error_response(model_name: str, err_msg: str) -> StreamingResponse:
+    chain_response = ChainResponse()
+    response_choice = ChainResponseChoices(
+        index=0,
+        message=Message(role="assistant", content=err_msg),
+        delta=Message(role="assistant", content=err_msg),
+        finish_reason="stop"
+    )
+    chain_response.choices.append(response_choice)
+    chain_response.model = model_name
+    chain_response.object = "chat.completion.chunk"
+    chain_response.created = int(time.time())
+    return StreamingResponse(
+        iter(["data: " + chain_response.json() + "\n\n"]),
+        media_type="text/event-stream",
+        status_code=500
+    )
+
 
 gradio_blocks = create_config_interface()
 app = gradio.mount_gradio_app(app, gradio_blocks, path="/config")
+
+
+

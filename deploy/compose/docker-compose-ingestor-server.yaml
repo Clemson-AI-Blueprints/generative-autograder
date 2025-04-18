@@ -49,8 +49,8 @@ services:
 
       ##===NV-Ingest Extract Configurations==========
       APP_NVINGEST_EXTRACTTEXT: ${APP_NVINGEST_EXTRACTTEXT:-True}
-      APP_NVINGEST_EXTRACTTABLES: ${APP_NVINGEST_EXTRACTTABLES:-True}
-      APP_NVINGEST_EXTRACTCHARTS: ${APP_NVINGEST_EXTRACTCHARTS:-True}
+      APP_NVINGEST_EXTRACTTABLES: ${APP_NVINGEST_EXTRACTTABLES:-False}
+      APP_NVINGEST_EXTRACTCHARTS: ${APP_NVINGEST_EXTRACTCHARTS:-False}
       APP_NVINGEST_EXTRACTIMAGES: ${APP_NVINGEST_EXTRACTIMAGES:-False}
       APP_NVINGEST_EXTRACTMETHOD: ${APP_NVINGEST_EXTRACTMETHOD:-pdfium}
       # Extract text by "page" only recommended for documents with pages like .pdf, .docx, etc.
@@ -84,7 +84,7 @@ services:
 
   nv-ingest-ms-runtime:
     image: nvcr.io/nvidia/nemo-microservices/nv-ingest:25.3.0
-    cpuset: "0-15"
+    cpuset: "0-5"
     volumes:
       - ${DATASET_ROOT:-./data}:/workspace/data
     ports:
@@ -99,12 +99,12 @@ services:
       - AUDIO_GRPC_ENDPOINT=audio:50051
       - AUDIO_INFER_PROTOCOL=grpc
       - CUDA_VISIBLE_DEVICES=0
-      - MAX_INGEST_PROCESS_WORKERS=${MAX_INGEST_PROCESS_WORKERS:-16}
+      - MAX_INGEST_PROCESS_WORKERS=2
       - EMBEDDING_NIM_MODEL_NAME=${EMBEDDING_NIM_MODEL_NAME:-${APP_EMBEDDINGS_MODELNAME:-nvidia/llama-3.2-nv-embedqa-1b-v2}}
       # Incase of self-hosted embedding model, use the endpoint url as - https://integrate.api.nvidia.com/v1
       - EMBEDDING_NIM_ENDPOINT=${EMBEDDING_NIM_ENDPOINT:-${APP_EMBEDDINGS_SERVERURL-http://nemoretriever-embedding-ms:8000/v1}}
       - INGEST_LOG_LEVEL=DEFAULT
-      - INGEST_EDGE_BUFFER_SIZE=64
+      - INGEST_EDGE_BUFFER_SIZE=16
       # Message client for development
       #- MESSAGE_CLIENT_HOST=0.0.0.0
       #- MESSAGE_CLIENT_PORT=7671
