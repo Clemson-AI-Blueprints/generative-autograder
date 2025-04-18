@@ -4,6 +4,8 @@ services:
   rag-server:
     container_name: rag-server
     image: nvcr.io/nvidia/blueprint/rag-server:${TAG:-2.0.0}
+    volumes:
+      - ../../autohint_configs:/mounted_autohint_configs
     build:
       # Set context to repo's root directory
       context: ../../

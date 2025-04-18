@@ -51,6 +51,9 @@ from .utils import (
     print_health_report
 )
 
+import gradio 
+from .autohint_config_page.app import create_config_interface
+
 logging.basicConfig(level=os.environ.get('LOGLEVEL', 'INFO').upper())
 logger = logging.getLogger(__name__)
 
@@ -1002,3 +1005,8 @@ async def document_search(request: Request, data: DocumentSearch) -> Dict[str, L
     except Exception as e:
         logger.error("Error from POST /search endpoint. Error details: %s", e)
         return JSONResponse(content={"message": "Error occurred while searching documents."}, status_code=500)
+    
+
+
+gradio_blocks = create_config_interface()
+app = gradio.mount_gradio_app(app, gradio_blocks, path="/config")
