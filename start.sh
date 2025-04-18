@@ -11,9 +11,9 @@ export YOLOX_GRAPHIC_ELEMENTS_INFER_PROTOCOL="http"
 export YOLOX_TABLE_STRUCTURE_HTTP_ENDPOINT="https://ai.api.nvidia.com/v1/cv/nvidia/nemoretriever-table-structure-v1"
 export YOLOX_TABLE_STRUCTURE_INFER_PROTOCOL="http"
 
-docker compose -f deploy/compose/vectordb.yaml down 
-docker compose -f deploy/compose/docker-compose-ingestor-server.yaml down
 docker compose -f deploy/compose/docker-compose-rag-server.yaml down
+docker compose -f deploy/compose/docker-compose-ingestor-server.yaml down
+docker compose -f deploy/compose/vectordb.yaml down 
 
 
 docker compose -f deploy/compose/vectordb.yaml up -d --build

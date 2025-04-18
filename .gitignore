@@ -20,3 +20,6 @@ docs/_*
 
 # Notebook checkpoints
 notebooks/.ipynb_checkpoints
+
+# autohint configuration
+autohint_configs/*

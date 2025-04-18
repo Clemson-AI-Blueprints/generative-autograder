@@ -12,9 +12,10 @@ from .ui_components import visibility_radios, build_visibility_radios, build_cfg
 def _file_records_from_uploads(
     upload_paths: List[Path], category: str
 ) -> List[FileRecord]:
+    print("Upload paths:", upload_paths)
     if not upload_paths:
         return []
-    return [FileRecord(Path(p).name, category) for p in upload_paths]
+    return [FileRecord(Path(p).name, category, visible_to_students=True, upload_path=Path(p)) for p in upload_paths]
 
 
 def create_config_interface():
@@ -99,7 +100,7 @@ def create_config_interface():
 
             print("Visibility:", visibility)
 
-            # save_project(pid, option, new_files, visibility)
+            save_project(pid, option, new_files, visibility)
             # Reload to rebuild radios cleanly
             df, _, _ = refresh(pid)
             return df 

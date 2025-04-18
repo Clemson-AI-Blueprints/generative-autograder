@@ -31,7 +31,27 @@ def save_project(
     # Merge with existing data to preserve visibility flags when untouched
     files = load_project(project_id).get("files", [])
     for f in new_files:
-        files.append(f.to_dict())
+        # If a file already has this name, update it
+        for i in range(len(files)):
+            if files[i]['name'] == f.name:
+                files[i] = f.to_dict()
+                break
+        else:
+            # Otherwise, add it to the list
+            files.append(f.to_dict())
+
+        # upload the file to the folder 
+        print("Uploading file", f.name)
+        f_path = folder / f.name
+        f_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Copy from f.upload_path to f_path
+        with open(f.upload_path, "rb") as src:
+            with open(f_path, "wb") as dst:
+                dst.write(src.read())
+                
+        print("Wrote file to", f_path)
+
 
     for f in files:
         f['visible_to_students'] = f['name'] in visibility
