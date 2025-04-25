@@ -1,4 +1,4 @@
-<h1><img align="center" src="https://github.com/Clemson-AI-Blueprints/generative-autograder/blob/ecc4ef8290ec5b90878ad6800e0331f912142b0f/assets/icon.png">Generative Autograder Blueprint</h1>
+<h1><img align="center" src="https://github.com/Clemson-AI-Blueprints/generative-autograder/blob/main/assets/icon.png">Generative Autograder Blueprint</h1>
 
 Use this documentation to understand, deploy, and customize the **Generative Autograder Hint Server**—a Retrieval‑Augmented Generation (RAG) service that produces pedagogically‑sound hints for programming assignments.
 
