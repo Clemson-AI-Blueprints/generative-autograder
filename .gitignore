@@ -27,3 +27,4 @@ autohint_configs/*
 # LLM models
 deploy/compose/models/
 deploy/compose/ngc/
+.env 
