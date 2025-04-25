@@ -1,0 +1,327 @@
+########################################################################
+#                        ──  RAG SERVER & UI  ──                       #
+########################################################################
+services:
+
+  ######################################################################
+  #  Orchestrator ­(RAG server)
+  ######################################################################
+  rag-server:
+    container_name: rag-server
+    image: nvcr.io/nvidia/blueprint/rag-server:${TAG:-2.0.0}
+    build:
+      context: ../../
+      dockerfile: src/Dockerfile
+    command: --port 8081 --host 0.0.0.0 --workers 8
+    volumes:
+      - ../../autohint_configs:/mounted_autohint_configs
+    environment:
+      EXAMPLE_PATH: "src/"
+      MINIO_ENDPOINT: "minio:9010"
+      MINIO_ACCESSKEY: "minioadmin"
+      MINIO_SECRETKEY: "minioadmin"
+
+      # ── Vector store ────────────────────────────────────────────────
+      APP_VECTORSTORE_URL: "http://milvus:19530"
+      APP_VECTORSTORE_NAME: "milvus"
+      APP_VECTORSTORE_SEARCHTYPE: ${APP_VECTORSTORE_SEARCHTYPE:-"dense"}
+      COLLECTION_NAME: ${COLLECTION_NAME:-multimodal_data}
+      APP_RETRIEVER_SCORETHRESHOLD: 0.25
+      VECTOR_DB_TOPK: 100
+
+      # ── Model end-points ────────────────────────────────────────────
+      APP_LLM_MODELNAME: TheBloke/LLaMA-3-8B-Instruct-GPTQ
+      APP_LLM_SERVERURL: "http://llama-8b-light:80"
+
+
+      APP_QUERYREWRITER_MODELNAME: TheBloke/LLaMA-3-8B-Instruct-GPTQ
+      APP_QUERYREWRITER_SERVERURL: "http://llama-8b-light:80"
+
+      APP_EMBEDDINGS_MODELNAME: BAAI/bge-small-en-v1.5
+      APP_EMBEDDINGS_SERVERURL: "http://bge-embedding-ms:80"
+
+      APP_RANKING_MODELNAME: HuggingFaceH4/zephyr-7b-alpha
+      APP_RANKING_SERVERURL: "http://mini-reranker-ms:80"
+
+      ENABLE_RERANKER: ${ENABLE_RERANKER:-True}
+
+      # ── Misc configuration ──────────────────────────────────────────
+      NVIDIA_API_KEY: ${NVIDIA_API_KEY:?NVIDIA_API_KEY is required}
+      APP_RETRIEVER_TOPK: 10
+      LOGLEVEL: ${LOGLEVEL:-INFO}
+      ENABLE_MULTITURN: ${ENABLE_MULTITURN:-True}
+      ENABLE_QUERYREWRITER: ${ENABLE_QUERYREWRITER:-False}
+      ENABLE_CITATIONS: ${ENABLE_CITATIONS:-True}
+
+      ENABLE_GUARDRAILS: ${ENABLE_GUARDRAILS:-False}
+      NEMO_GUARDRAILS_URL: ${NEMO_GUARDRAILS_URL:-nemo-guardrails-microservice:7331}
+
+      CONVERSATION_HISTORY: 5
+
+      APP_TRACING_ENABLED: "False"
+      APP_TRACING_OTLPHTTPENDPOINT: http://otel-collector:4318/v1/traces
+      APP_TRACING_OTLPGRPCENDPOINT: grpc://otel-collector:4317
+
+      ENABLE_SOURCE_METADATA: ${ENABLE_SOURCE_METADATA:-true}
+      FILTER_THINK_TOKENS: ${FILTER_THINK_TOKENS:-true}
+
+      ENABLE_REFLECTION: ${ENABLE_REFLECTION:-false}
+      MAX_REFLECTION_LOOP: ${MAX_REFLECTION_LOOP:-3}
+      CONTEXT_RELEVANCE_THRESHOLD: ${CONTEXT_RELEVANCE_THRESHOLD:-1}
+      RESPONSE_GROUNDEDNESS_THRESHOLD: ${RESPONSE_GROUNDEDNESS_THRESHOLD:-1}
+      REFLECTION_LLM: ${REFLECTION_LLM:-"mistralai/mixtral-8x22b-instruct-v0.1"}
+      REFLECTION_LLM_SERVERURL: ${REFLECTION_LLM_SERVERURL-"nim-llm-mixtral-8x22b:8000"}
+
+    ports:
+      - "8081:8081"
+    shm_size: 5gb
+
+########################################################################
+#                         ──  INGESTION  ──                            #
+########################################################################
+  ingestor-server:
+    container_name: ingestor-server
+    image: nvcr.io/nvidia/blueprint/ingestor-server:${TAG:-2.0.0}
+    build:
+      context: ../../
+      dockerfile: src/ingestor_server/Dockerfile
+    command: --port 8082 --host 0.0.0.0 --workers 1
+    environment:
+      EXAMPLE_PATH: "src/ingestor_server"
+      APP_VECTORSTORE_URL: "http://milvus:19530"
+      APP_VECTORSTORE_NAME: "milvus"
+      APP_VECTORSTORE_SEARCHTYPE: ${APP_VECTORSTORE_SEARCHTYPE:-"dense"}
+      APP_VECTORSTORE_ENABLEGPUINDEX: ${APP_VECTORSTORE_ENABLEGPUINDEX:-True}
+      APP_VECTORSTORE_ENABLEGPUSEARCH: ${APP_VECTORSTORE_ENABLEGPUSEARCH:-True}
+      COLLECTION_NAME: ${COLLECTION_NAME:-multimodal_data}
+
+      MINIO_ENDPOINT: "minio:9010"
+      MINIO_ACCESSKEY: "minioadmin"
+      MINIO_SECRETKEY: "minioadmin"
+
+      NVIDIA_API_KEY: ${NVIDIA_API_KEY:?NVIDIA_API_KEY is required}
+
+      APP_EMBEDDINGS_SERVERURL: ${APP_EMBEDDINGS_SERVERURL-"nemoretriever-embedding-ms:8000"}
+      APP_EMBEDDINGS_MODELNAME: ${APP_EMBEDDINGS_MODELNAME:-nvidia/llama-3.2-nv-embedqa-1b-v2}
+      APP_EMBEDDINGS_DIMENSIONS: ${APP_EMBEDDINGS_DIMENSIONS:-2048}
+
+      APP_NVINGEST_MESSAGECLIENTHOSTNAME: ${APP_NVINGEST_MESSAGECLIENTHOSTNAME:-"nv-ingest-ms-runtime"}
+      APP_NVINGEST_MESSAGECLIENTPORT: ${APP_NVINGEST_MESSAGECLIENTPORT:-7670}
+
+      APP_NVINGEST_EXTRACTTEXT: ${APP_NVINGEST_EXTRACTTEXT:-True}
+      APP_NVINGEST_EXTRACTTABLES: ${APP_NVINGEST_EXTRACTTABLES:-False}
+      APP_NVINGEST_EXTRACTCHARTS: ${APP_NVINGEST_EXTRACTCHARTS:-False}
+      APP_NVINGEST_EXTRACTIMAGES: ${APP_NVINGEST_EXTRACTIMAGES:-False}
+      APP_NVINGEST_EXTRACTMETHOD: ${APP_NVINGEST_EXTRACTMETHOD:-pdfium}
+      APP_NVINGEST_TEXTDEPTH: ${APP_NVINGEST_TEXTDEPTH:-page}
+      APP_NVINGEST_CHUNKSIZE: ${APP_NVINGEST_CHUNKSIZE:-1024}
+      APP_NVINGEST_CHUNKOVERLAP: ${APP_NVINGEST_CHUNKOVERLAP:-150}
+      APP_NVINGEST_CAPTIONMODELNAME: ${APP_NVINGEST_CAPTIONMODELNAME:-"meta/llama-3.2-11b-vision-instruct"}
+      APP_NVINGEST_CAPTIONENDPOINTURL: ${APP_NVINGEST_CAPTIONENDPOINTURL:-"http://vlm-ms:8000/v1/chat/completions"}
+
+      ENABLE_CITATIONS: ${ENABLE_CITATIONS:-True}
+      LOGLEVEL: ${LOGLEVEL:-INFO}
+    ports:
+      - "8082:8082"
+    shm_size: 5gb
+
+  redis:
+    image: redis/redis-stack
+    ports:
+      - "6379:6379"
+
+  nv-ingest-ms-runtime:
+    image: nvcr.io/nvidia/nemo-microservices/nv-ingest:25.3.0
+    cpuset: "0-5"
+    volumes:
+      - ${DATASET_ROOT:-./data}:/workspace/data
+    ports:
+      - "7670:7670"
+      - "7671:7671"
+    cap_add:
+      - sys_nice
+    environment:
+      AUDIO_GRPC_ENDPOINT: audio:50051
+      AUDIO_INFER_PROTOCOL: grpc
+      CUDA_VISIBLE_DEVICES: 0
+      MAX_INGEST_PROCESS_WORKERS: 2
+      EMBEDDING_NIM_MODEL_NAME: ${EMBEDDING_NIM_MODEL_NAME:-${APP_EMBEDDINGS_MODELNAME:-nvidia/llama-3.2-nv-embedqa-1b-v2}}
+      EMBEDDING_NIM_ENDPOINT: ${EMBEDDING_NIM_ENDPOINT:-${APP_EMBEDDINGS_SERVERURL-http://nemoretriever-embedding-ms:8000/v1}}
+      INGEST_LOG_LEVEL: DEFAULT
+      INGEST_EDGE_BUFFER_SIZE: 16
+      MESSAGE_CLIENT_HOST: redis
+      MESSAGE_CLIENT_PORT: 6379
+      MESSAGE_CLIENT_TYPE: redis
+      MINIO_BUCKET: ${MINIO_BUCKET:-nv-ingest}
+      MRC_IGNORE_NUMA_CHECK: 1
+      NEMORETRIEVER_PARSE_HTTP_ENDPOINT: http://nemoretriever-parse:8000/v1/chat/completions
+      NEMORETRIEVER_PARSE_INFER_PROTOCOL: http
+      NVIDIA_API_KEY: ${NVIDIA_API_KEY:-nvidiaapikey}
+      NGC_API_KEY: ${NVIDIA_API_KEY:-nvidiaapikey}
+      NVIDIA_BUILD_API_KEY: ${NVIDIA_API_KEY:-nvidiaapikey}
+      OTEL_EXPORTER_OTLP_ENDPOINT: otel-collector:4317
+      PADDLE_GRPC_ENDPOINT: paddle:8001
+      PADDLE_HTTP_ENDPOINT: ${PADDLE_HTTP_ENDPOINT-http://paddle:8000/v1/infer}
+      PADDLE_INFER_PROTOCOL: ${PADDLE_INFER_PROTOCOL-grpc}
+      READY_CHECK_ALL_COMPONENTS: "False"
+      REDIS_MORPHEUS_TASK_QUEUE: morpheus_task_queue
+      YOLOX_GRPC_ENDPOINT: page-elements:8001
+      YOLOX_HTTP_ENDPOINT: ${YOLOX_HTTP_ENDPOINT:-http://page-elements:8000/v1/infer}
+      YOLOX_INFER_PROTOCOL: ${YOLOX_INFER_PROTOCOL:-grpc}
+      YOLOX_GRAPHIC_ELEMENTS_GRPC_ENDPOINT: graphic-elements:8001
+      YOLOX_GRAPHIC_ELEMENTS_HTTP_ENDPOINT: ${YOLOX_GRAPHIC_ELEMENTS_HTTP_ENDPOINT:-http://graphic-elements:8000/v1/infer}
+      YOLOX_GRAPHIC_ELEMENTS_INFER_PROTOCOL: ${YOLOX_GRAPHIC_ELEMENTS_INFER_PROTOCOL:-grpc}
+      YOLOX_TABLE_STRUCTURE_GRPC_ENDPOINT: table-structure:8001
+      YOLOX_TABLE_STRUCTURE_HTTP_ENDPOINT: ${YOLOX_TABLE_STRUCTURE_HTTP_ENDPOINT:-http://table-structure:8000/v1/infer}
+      YOLOX_TABLE_STRUCTURE_INFER_PROTOCOL: ${YOLOX_TABLE_STRUCTURE_INFER_PROTOCOL:-grpc}
+      VLM_CAPTION_ENDPOINT: ${VLM_CAPTION_ENDPOINT:-http://vlm-ms:8000/v1/chat/completions}
+      VLM_CAPTION_MODEL_NAME: ${VLM_CAPTION_MODEL_NAME:-meta/llama-3.2-11b-vision-instruct}
+      MODEL_PREDOWNLOAD_PATH: ${MODEL_PREDOWNLOAD_PATH:-/workspace/models/}
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://nv-ingest-ms-runtime:7670/v1/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+# ########################################################################
+# #                         ──  VECTOR DB  ──                             #
+# ########################################################################
+
+  # Milvus can be made GPU accelerated by uncommenting the lines as specified below
+  milvus:
+    container_name: milvus-standalone
+    image: milvusdb/milvus:v2.5.3-gpu # milvusdb/milvus:v2.5.3 for CPU
+    command: ["milvus", "run", "standalone"]
+    environment:
+      ETCD_ENDPOINTS: etcd:2379
+      MINIO_ADDRESS: minio:9010
+      KNOWHERE_GPU_MEM_POOL_SIZE: 2048;4096
+    volumes:
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/milvus:/var/lib/milvus
+    # healthcheck:
+    #   test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
+    #   interval: 30s
+    #   start_period: 90s
+    #   timeout: 20s
+    #   retries: 3
+    ports:
+      - "19530:19530"
+      - "9091:9091"
+    depends_on:
+      - "etcd"
+      - "minio"
+    # Comment out this section if CPU based image is used and set below env variables to False
+    # export APP_VECTORSTORE_ENABLEGPUSEARCH=False
+    # export APP_VECTORSTORE_ENABLEGPUINDEX=False
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           capabilities: ["gpu"]
+    #           # count: ${INFERENCE_GPU_COUNT:-all}
+    #           device_ids: ['${VECTORSTORE_GPU_DEVICE_ID:-0}']
+
+  etcd:
+    container_name: milvus-etcd
+    image: quay.io/coreos/etcd:v3.5.19
+    environment:
+      - ETCD_AUTO_COMPACTION_MODE=revision
+      - ETCD_AUTO_COMPACTION_RETENTION=1000
+      - ETCD_QUOTA_BACKEND_BYTES=4294967296
+      - ETCD_SNAPSHOT_COUNT=50000
+    volumes:
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/etcd:/etcd
+    command: etcd -advertise-client-urls=http://127.0.0.1:2379 -listen-client-urls http://0.0.0.0:2379 --data-dir /etcd
+    healthcheck:
+      test: ["CMD", "etcdctl", "endpoint", "health"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  minio:
+    container_name: milvus-minio
+    image: minio/minio:RELEASE.2025-02-28T09-55-16Z
+    environment:
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+    ports:
+      - "9011:9011"
+      - "9010:9010"
+    volumes:
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/minio:/minio_data
+    command: minio server /minio_data --console-address ":9011" --address ":9010"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9010/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+########################################################################
+# #                         ──  NIMs  ──                             #
+#######################################################################
+
+  llama-8b-light:
+    container_name: llama-8b-light
+    image: ghcr.io/huggingface/text-generation-inference:1.3
+    ports:
+      - "8088:80"
+    environment:
+      MODEL_ID: TheBloke/LLaMA-Pro-8B-Instruct-GPTQ
+      QUANTIZE: gptq
+      PORT: 80
+      HUGGING_FACE_HUB_TOKEN: "${HUGGING_FACE_HUB_TOKEN}"
+    volumes:
+      - ${MODEL_DIRECTORY:-./models}:/data
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['0']
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+
+  embedding-service:
+    image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.1
+    container_name: bge-embedding-ms
+    ports:
+      - "9080:80"
+    environment:
+      MODEL_ID: BAAI/bge-small-en-v1.5
+      PORT: 80
+
+  reranker-service:
+    image: ghcr.io/huggingface/text-generation-inference:1.3
+    container_name: mini-reranker-ms
+    ports:
+      - "1976:80"
+    environment:
+      MODEL_ID: HuggingFaceH4/zephyr-7b-alpha
+      PORT: 80
+      HUGGING_FACE_HUB_TOKEN: "${HUGGING_FACE_HUB_TOKEN}"
+    volumes:
+      - ${MODEL_DIRECTORY:-./models}:/data
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['0']
+              capabilities: [gpu]
+
+
+
+
+
+########################################################################
+#                               NETWORKS                               #
+########################################################################
+networks:
+  default:         # makes `nvidia-rag` the implicit network for every service
+    name: nvidia-rag
