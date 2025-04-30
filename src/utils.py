@@ -62,6 +62,8 @@ try:
 except Exception:
     logger.warning("Optional langchain_openai module not installed.")
 
+from huggingface_hub import InferenceClient
+
 try:
     from langchain_community.docstore.in_memory import InMemoryDocstore
     from langchain_community.embeddings import HuggingFaceEmbeddings
@@ -418,6 +420,19 @@ def delete_collections(vdb_endpoint: str, collection_names: List[str]) -> dict:
             "total_success": 0,
             "total_failed": len(collection_names)
         }
+    
+class TGIWrapper(LLM):
+    def __init__(self, url: str, model_name: str = "", **kwargs):
+        self.client = InferenceClient(model=f"http://{url}")
+        self.kwargs = kwargs
+        self.model_name = model_name
+
+    def _call(self, prompt: str, stop=None) -> str:
+        return self.client.text_generation(prompt, **self.kwargs)
+
+    @property
+    def _llm_type(self) -> str:
+        return "huggingface-tgi"
 
 @utils_cache
 @lru_cache()
@@ -477,9 +492,22 @@ def get_llm(**kwargs) -> LLM | SimpleChatModel:
                           temperature=kwargs.get('temperature', None),
                           top_p=kwargs.get('top_p', None),
                           max_tokens=kwargs.get('max_tokens', None))
-
-    raise RuntimeError(
-        "Unable to find any supported Large Language Model server. Supported engine name is nvidia-ai-endpoints.")
+    
+    elif settings.llm.model_engine == "huggingface":
+        if kwargs.get('llm_endpoint') and kwargs.get('llm_endpoint') != '""':
+            logger.info("Using Hugging Face TGI model %s hosted at %s", kwargs.get('model'), kwargs.get('llm_endpoint'))
+            return TGIWrapper(
+                url=kwargs['llm_endpoint'],
+                model_name=kwargs.get('model'),
+                max_new_tokens=kwargs.get('max_tokens', 100),
+                temperature=kwargs.get('temperature', 0.7),
+                top_p=kwargs.get('top_p', 0.95),
+                do_sample=True
+            )
+        
+    else:
+        raise RuntimeError(
+            "Unable to find any supported Large Language Model server. Supported engine name is nvidia-ai-endpoints or huggingface TGI: " + settings.llm.model_engine) 
 
 
 @lru_cache
