@@ -92,7 +92,8 @@ def hint_elements_to_prompt(hint_element_dicts: List[Dict]) -> str:
     system_prompt = (
         "You are a helpful teaching assistant. "
         "Use the information below to generate a hint for a student working on a programming assignment. "
-        "Avoid giving away the full answer. Instead, guide the student toward discovering the fix themselves.\n\n"
+        "Avoid giving away the full answer. Instead, guide the student toward discovering the fix themselves."
+        "Only respond with conicse hints, no fluff\n\n"
     )
 
     body = ""
@@ -114,4 +115,4 @@ def hint_elements_to_prompt(hint_element_dicts: List[Dict]) -> str:
         body = "No hint elements were provided do to length truncation."
 
 
-    return f"<|system|>\n{system_prompt}\n<|user|>\nBased on these elements, write a hint. {body.strip()}\n<|assistant|>"
+    return f"<|system|>\n{system_prompt}\n<|user|>\nBased on these elements, write a hint and only a hint. {body.strip()}\n<|assistant|>"

@@ -1159,6 +1159,7 @@ async def generate_hint(_: Request, hint_prompt: HintOnlyPrompt) -> StreamingRes
             finish_reason="stop"
         )
         chain_response.choices.append(response_choice)
+        print("Response returned from /generate_hint: ", chain_response)
         return chain_response
 
     except (MilvusException, MilvusUnavailableException) as e:
