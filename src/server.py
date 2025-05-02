@@ -1108,13 +1108,7 @@ async def generate_hint(_: Request, hint_prompt: HintOnlyPrompt) -> StreamingRes
         #log the hint context
         logger.info("Hint context: %s", hint_context)
 
-        system_prompt = (
-            "You are a helpful teaching assistant. "
-            "Use the information below to generate a hint for a student working on a programming assignment. "
-            "Avoid giving away the full answer. Instead, guide the student toward discovering the fix themselves.\n\n"
-        )
-
-        formatted_prompt = f"<|system|>\n{system_prompt}\n<|user|>\n{hint_context.strip()}\n<|assistant|>"
+        formatted_prompt = hint_context
 
         # Collect all LLM settings from the incoming request
         llm_settings = {

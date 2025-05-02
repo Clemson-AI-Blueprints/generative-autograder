@@ -104,9 +104,14 @@ def hint_elements_to_prompt(hint_element_dicts: List[Dict]) -> str:
         element_str += f"## Relevance\n{hint_element.relevance}\n"
 
         # Check token length before appending
-        if len(system_prompt + body + element_str) / 4 > MAX_INPUT_TOKENS:
-            print("Warning: The prompt is too long. Truncating the hint elements.")
-            break
+        if len(system_prompt + body + element_str) / 3 > MAX_INPUT_TOKENS:
+            print("Warning: The prompt is too long. Skipping this hint element.")
+            continue
         body += element_str
 
-    return system_prompt + body + "\n<|user|>\nBased on these elements, write a hint.\n<|assistant|>"
+    if not body:
+        print("Warning: No hint elements were provided.")
+        body = "No hint elements were provided do to length truncation."
+
+
+    return f"<|system|>\n{system_prompt}\n<|user|>\nBased on these elements, write a hint. {body.strip()}\n<|assistant|>"
