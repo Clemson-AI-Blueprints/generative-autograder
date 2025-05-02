@@ -87,32 +87,40 @@ def process_element(hint_element: HintElement) -> str:
 MAX_INPUT_TOKENS = 850
 
 def hint_elements_to_prompt(hint_element_dicts: List[Dict]) -> str:
-    hint_elements = [HintElement.from_dict(hint_element_dict) for hint_element_dict in hint_element_dicts]
-    
+    hint_elements = [HintElement.from_dict(d) for d in hint_element_dicts]
+
     system_prompt = (
-        "You are a helpful teaching assistant. "
-        "Use the information below to generate a hint for a student working on a programming assignment. "
-        "Avoid giving away the full answer. Instead, guide the student toward discovering the fix themselves."
-        "Only respond with conicse hints, no fluff\n\n"
+        "You are a helpful teaching assistant for a college programming course. "
+        "The student is struggling with an assignment. Your goal is to offer a specific and concise hint "
+        "that helps them identify their mistake or improve their approach without giving away the full solution. "
+        "Use the context below to inform your hint."
+    )
+
+    instructions = (
+        "Write a clear and concise hint for the student using the relevant context provided. "
+        "Focus on guiding the student to understand what might be wrong or what to think about, "
+        "but do not fix the code or solve the problem for them."
     )
 
     body = ""
     for i, hint_element in enumerate(hint_elements):
-        element_str = f"\n# Element {i + 1}\n"
-        element_str += f"## Content\n{process_element(hint_element)}\n"
-        element_str += f"## Source\n{hint_element.source.name}\n"
-        element_str += f"## Context\n{hint_element.context or ''}\n"
-        element_str += f"## Relevance\n{hint_element.relevance}\n"
+        element_str = f"\n### Element {i + 1}\n"
+        element_str += f"**Content**:\n{process_element(hint_element)}\n"
+        element_str += f"**Source**: {hint_element.source.name}\n"
+        element_str += f"**Context**: {hint_element.context or 'None'}\n"
+        element_str += f"**Relevance**: {hint_element.relevance}\n"
 
-        # Check token length before appending
+        # Token budget
         if len(system_prompt + body + element_str) / 3 > MAX_INPUT_TOKENS:
             print("Warning: The prompt is too long. Skipping this hint element.")
             continue
         body += element_str
 
     if not body:
-        print("Warning: No hint elements were provided.")
-        body = "No hint elements were provided do to length truncation."
+        body = "\nNo elements could be included due to length limits."
 
-
-    return f"<|system|>\n{system_prompt}\n<|user|>\nBased on these elements, write a hint and only a hint. {body.strip()}\n<|assistant|>"
+    return (
+        f"<|system|>\n{system_prompt}\n"
+        f"<|user|>\n{instructions}\n{body.strip()}\n"
+        f"<|assistant|>"
+    )
