@@ -63,7 +63,8 @@ The default Docker Compose stack (see [`docker-compose-brev.yaml`](./deploy/comp
 
 ---
 ## Technical Diagram
-_Coming soon_ – The flow mirrors the NVIDIA RAG diagram with the autograder replacing the playground UI and a `/config` ingestion path.
+
+![Technical Diagram](docs/autohinter_diagram.png)
 
 ---
 ## Minimum System Requirements

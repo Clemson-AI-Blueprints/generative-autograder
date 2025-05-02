@@ -1,10 +1,11 @@
+# syntax=docker/dockerfile:1.4
 ARG BASE_IMAGE_URL=nvcr.io/nvidia/base/ubuntu
 ARG BASE_IMAGE_TAG=22.04_20240212
 
 FROM ${BASE_IMAGE_URL}:${BASE_IMAGE_TAG}
 
 ENV PYTHONDONTWRITEBYTECODE=1
-ENV DEBIAN_FRONTEND noninteractive
+ENV DEBIAN_FRONTEND=noninteractive
 
 # Install required ubuntu packages for setting up python 3.10
 RUN apt update && \
@@ -29,27 +30,28 @@ RUN apt install xz-utils -y
 RUN mkdir -p /legal/source
 WORKDIR /legal/source
 # Read installed packages, strip all but the package names, pipe to 'apt source' to download respective packages
-RUN apt list --installed |  grep -i installed | sed 's|\(.*\)/.*|\1|' | xargs apt source --download-only
+RUN apt list --installed | grep -i installed | sed 's|\(.*\)/.*|\1|' | xargs apt source --download-only
 # The source is saved in directories as well as tarballs in the current dir
 RUN rm xz-utils*
 COPY LICENSE-3rd-party.txt /legal/
 
-# Install common dependencies for all examples
+# ————————————————
+#  Install common dependencies for all examples, but only re-run when requirements.txt changes
+# ————————————————
+WORKDIR /workspace
+COPY requirements.txt /workspace/requirements.txt
+
 RUN --mount=type=cache,id=pip_cache,target=/root/.cache/pip,sharing=locked \
-    --mount=type=bind,source=./requirements.txt,target=/opt/requirements.txt \
-    pip3 install --no-cache-dir -r /opt/requirements.txt
+    python3.10 -m pip install --no-cache-dir -r requirements.txt
 
 # Set environment variables needed for Text splitter
-RUN mkdir /tmp-data/;
-RUN chmod 777 -R /tmp-data
-RUN chown 1000:1000 -R /tmp-data
+RUN mkdir /tmp-data/; \
+    chmod 777 -R /tmp-data; \
+    chown 1000:1000 -R /tmp-data
 ENV HF_HOME=/tmp-data
 
-WORKDIR /workspace
-
+# Now copy the rest of your code (will not invalidate the pip layer unless you touch requirements.txt)
 COPY ./ /workspace
-
-WORKDIR /workspace/
 
 ENTRYPOINT ["uvicorn", "src.server:app"]
 # ENTRYPOINT ["/bin/bash"]

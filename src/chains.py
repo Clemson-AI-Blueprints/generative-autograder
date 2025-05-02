@@ -128,7 +128,7 @@ class UnstructuredRAG(BaseExample):
                 ) from e
             raise APIError("Failed to upload document. " + str(e), code=500) from e
 
-    def llm_chain(self, query: str, chat_history: List[Dict[str, Any]], **kwargs) -> Generator[str, None, None]:
+    def llm_chain(self, query: str, chat_history: List[Dict[str, Any]], stream=True, **kwargs) -> Generator[str, None, None]:
         """Execute a simple LLM chain using the components defined above.
         It's called when the `/generate` API is invoked with `use_knowledge_base` set to `False`.
 
@@ -166,8 +166,13 @@ class UnstructuredRAG(BaseExample):
             prompt_template = ChatPromptTemplate.from_messages(message)
             llm = get_llm(**kwargs)
 
-            chain = prompt_template | llm | StreamingFilterThinkParser | StrOutputParser()
-            return chain.stream({"question": query}, config={'run_name':'llm-stream'})
+            if stream:
+                chain = prompt_template | llm | StreamingFilterThinkParser | StrOutputParser()
+                return chain.stream({"question": query}, config={'run_name':'llm-stream'})
+            else:
+                chain = prompt_template | llm | StrOutputParser()
+                return chain.invoke({"question": query}, config={'run_name': 'llm-invoke'})
+
         except ConnectTimeout as e:
             logger.warning("Connection timed out while making a request to the LLM endpoint: %s", e)
             return iter(["Connection timed out while making a request to the NIM endpoint. Verify if the NIM server is available."])

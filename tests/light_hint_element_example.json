@@ -1,0 +1,23 @@
+[
+    {
+        "content": "g++ pizzaStoreCheck.cpp PizzaStore.o -o psc.out",
+        "source": "SHELL_COMMAND",
+        "context": "Compilation command executed on autograder",
+        "relevance": 1.0,
+        "metadata": {}
+    },
+    {
+        "content": "Case getName pass\n            Umbrella: 8 8 8 8 8 \n            Umbrella: 8 4 8 8 8 \nCase firstSliceCount pass\n            Umbrella: 8 0 0 8 8 \nCase secondSliceCount pass\nCase tickUpdate pass\nCase tooMuchConsume pass\nCase multiconsume pass\n",
+        "source": "STUDENT_CODE",
+        "context": "Standard output running the previous compilation",
+        "relevance": 1.0,
+        "metadata": {}
+    },
+    {
+        "content": "Umbrella: 4 8 8 8 8",
+        "source": "EXPECTED_PHRASE",
+        "context": "The expected slice counts from the test case",
+        "relevance": 1.0,
+        "metadata": {}
+    }
+]

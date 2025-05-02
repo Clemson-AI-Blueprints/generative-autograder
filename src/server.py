@@ -1108,75 +1108,65 @@ async def generate_hint(_: Request, hint_prompt: HintOnlyPrompt) -> StreamingRes
         #log the hint context
         logger.info("Hint context: %s", hint_context)
 
-        # We then treat that entire hint context as if it's the user's single message
-        # so that it flows through the existing chain logic.
-        # Here, we build a single 'user' message inline:
-        fake_user_message = Message(role="user", content=hint_context)
+        system_prompt = (
+            "You are a helpful teaching assistant. "
+            "Your goal is to generate a specific, constructive, and concise hint that helps the student make progress "
+            "on their assignment without giving away the answer. "
+            "Use the provided elements as context. Focus on what might be confusing or commonly misunderstood.\n"
+        )
+
+        formatted_prompt = f"<|system|>\n{system_prompt}\n<|user|>\n{hint_context.strip()}\n<|assistant|>"
 
         # Collect all LLM settings from the incoming request
         llm_settings = {
             "temperature": hint_prompt.temperature,
             "top_p": hint_prompt.top_p,
             "max_tokens": hint_prompt.max_tokens,
+            "model": os.getenv("APP_LLM_MODELNAME"),
+            "llm_endpoint": os.getenv("APP_LLM_SERVERURL"),
             # "stop": hint_prompt.stop,
         }
         # (We won't store them in Prompt, but we'll pass them to rag_chain or llm_chain.)
 
         # Decide which chain to call (RAG or plain LLM)
-        example = app.example()
-        if hint_prompt.use_knowledge_base:
-            logger.info("Using knowledge base (rag_chain) for /generate_hint.")
-            generator = example.rag_chain(
-                query=fake_user_message.content,
-                chat_history=[],  # We have no prior conversation, so pass empty
-                top_n=hint_prompt.top_k,
-                collection_name=hint_prompt.collection_name,
-                **llm_settings
-            )
-        else:
-            logger.info("Using plain LLM (llm_chain) for /generate_hint.")
-            generator = example.llm_chain(
-                query=fake_user_message.content,
-                chat_history=[],
-                **llm_settings
-            )
+        generator = UNSTRUCTURED_RAG.llm_chain(query=formatted_prompt, chat_history=[], stream=False, **llm_settings)
+        # if hint_prompt.use_knowledge_base:
+        #     logger.info("Using knowledge base (rag_chain) for /generate_hint.")
+        #     generator = example.rag_chain(
+        #         query=fake_user_message.content,
+        #         chat_history=[],  # We have no prior conversation, so pass empty
+        #         top_n=hint_prompt.top_k,
+        #         collection_name=hint_prompt.collection_name,
+        #         **llm_settings
+        #     )
+        # else:
+        #     logger.info("Using plain LLM (llm_chain) for /generate_hint.")
+        #     generator = example.llm_chain(
+        #         query=fake_user_message.content,
+        #         chat_history=[],
+        #         **llm_settings
+        #     )
 
-        # -------------------------
-        # Streaming response
-        # -------------------------
-        def response_generator():
-            resp_id = str(uuid4())
-            if generator:
-                for chunk in generator:
-                    chain_response = ChainResponse()
-                    response_choice = ChainResponseChoices(
-                        index=0,
-                        message=Message(role="assistant", content=chunk),
-                        delta=Message(role=None, content=chunk),
-                        finish_reason=None
-                    )
-                    chain_response.id = resp_id
-                    chain_response.choices.append(response_choice)
-                    chain_response.model = hint_prompt.model
-                    chain_response.object = "chat.completion.chunk"
-                    chain_response.created = int(time.time())
-                    yield "data: " + chain_response.json() + "\n\n"
+        resp_id = str(uuid4())
+        chain_response = ChainResponse()
+        chain_response.id = resp_id
+        chain_response.model = hint_prompt.model
+        chain_response.object = "chat.completion"
+        chain_response.created = int(time.time())
 
-                # After all chunks, send a final done event
-                chain_response = ChainResponse()
-                response_choice = ChainResponseChoices(finish_reason="stop")
-                chain_response.id = resp_id
-                chain_response.choices.append(response_choice)
-                chain_response.model = hint_prompt.model
-                chain_response.object = "chat.completion.chunk"
-                chain_response.created = int(time.time())
-                yield "data: " + chain_response.json() + "\n\n"
-            else:
-                # If no generator, yield an empty response
-                chain_response = ChainResponse()
-                yield "data: " + chain_response.json() + "\n\n"
+        full_content = ""
+        if generator:
+            for chunk in generator:
+                full_content += chunk
 
-        return StreamingResponse(response_generator(), media_type="text/event-stream")
+        response_choice = ChainResponseChoices(
+            index=0,
+            message=Message(role="assistant", content=full_content),
+            delta=Message(role=None, content=full_content),  # Valid Message object
+            finish_reason="stop"
+        )
+        chain_response.choices.append(response_choice)
+        return chain_response
 
     except (MilvusException, MilvusUnavailableException) as e:
         exception_msg = (

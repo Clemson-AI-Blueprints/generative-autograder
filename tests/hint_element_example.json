@@ -1,0 +1,39 @@
+[
+    {
+        "content": "g++ pizzaStoreCheck.cpp PizzaStore.o -o psc.out",
+        "source": "SHELL_COMMAND",
+        "context": "Compilation command executed on autograder",
+        "relevance": 1.0,
+        "metadata": {}
+    },
+    {
+        "content": "#include \"PizzaStore.h\"\n#include <iostream>\n\nusing namespace std;\n\n// Outputs if the case failed or passed\n// e.g. \n// Case myTest pass\nvoid caseOutput(string name, bool pass){\n  cout << \"Case \" << name << \" \";\n  if (pass){\n    cout << \"pass\";\n  } else {\n    cout << \"fail\";\n  }\n  cout << endl;\n}\n\n\nint main(){\n  // getName with constructor\n  // name is Umbrella, maxPizzas is 5, productionPerTick is 3, successRate is 1 \n  PizzaStore store1(\"Umbrella\", 5, 3, 1);\n  caseOutput(\"getName\", store1.getName() == \"Umbrella\");\n\n  // Full pizza store status\n  // Should have \"Umbrella: 8 8 8 8 8\"\n  store1.showStatus();\n\n  // If I consume 4 slices, there should be 36 left \n  store1.consumeSlices(4);\n  store1.showStatus(); // Should be Umbrella: 4 8 8 8 8\n  caseOutput(\"firstSliceCount\", store1.getTotalSlicesLeft() == 36);\n\n  // If I consume 12 slices, there should be 24 left\n  store1.consumeSlices(12);\n  store1.showStatus(); // Should be Umbrella: 0 0 8 8 8\n  caseOutput(\"secondSliceCount\", store1.getTotalSlicesLeft() == 24);\n\n  // If I do a tick update, the number of slices should increase by some amount because I have a perfect successRate \n  store1.tickUpdate();\n  caseOutput(\"tickUpdate\", store1.getTotalSlicesLeft() > 24);\n\n  // Consuming too many slices \n  bool val = store1.consumeSlices(100);\n  // val should be false because the store does not have 100 slices on hand  \n  caseOutput(\"tooMuchConsume\", !val);\n  \n\n  // A hidden testcase where we consume many times in a row \n  // Also tries consuming 0 slices at one point\n  PizzaStore store2(\"dog\", 8, 0, 0);\n  for (int i = 0; i < 3; i++){\n    store2.consumeSlices(i);\n  }\n  caseOutput(\"multiconsume\", store2.getTotalSlicesLeft() == 61);  // 61 is 8 x 8 - (0 + 1 + 2) \n\n}\n",
+        "source": "FILE",
+        "context": "File used in compilation from pizzaStoreCheck.cpp",
+        "relevance": 1.0,
+        "metadata": {
+            "file_path": "pizzaStoreCheck.cpp"
+        }
+    },
+    {
+        "content": "Case getName pass\n            Umbrella: 8 8 8 8 8 \n            Umbrella: 8 4 8 8 8 \nCase firstSliceCount pass\n            Umbrella: 8 0 0 8 8 \nCase secondSliceCount pass\nCase tickUpdate pass\nCase tooMuchConsume pass\nCase multiconsume pass\n",
+        "source": "STUDENT_CODE",
+        "context": "Standard output running the previous compilation",
+        "relevance": 1.0,
+        "metadata": {}
+    },
+    {
+        "content": "#include \"PizzaStore.h\"\n#include <cstdlib>\n#include <stdexcept>\n#include <iostream>\n#include <iomanip>\n\nPizzaStore::PizzaStore(){\n  this->name = \"default\";\n  this->maxPizzas = 0;\n  this->productionPerTick = 0;\n  this->successRate = 0;\n}\n\nPizzaStore::PizzaStore(string name,\n                       int maxPizzas,\n                       double productionPerTick,\n                       double successRate){\n  this->name = name;\n  this->maxPizzas = maxPizzas;\n\n  // Filling the pizza array with full pizzas to start\n  for (int i = 0; i < this->maxPizzas; i++){\n    this->pizzas[i] = Pizza();\n  }\n\n  this->productionPerTick = productionPerTick;\n  this->successRate = successRate;\n}\n\nint PizzaStore::tickUpdate(){\n  // Calculating how many new pizzas we get\n  int newPizzas = 0; \n  for (int i = 0; i < productionPerTick; i++){\n    // Getting a random value between 0 and 1\n    float r = (rand() % 1000) / 1000;\n    // If less than successRate then add a pizza\n    // e.g. if successRate is 80% then any value less than .8 means a new\n    // pizza is made\n    if (r <= successRate){\n      newPizzas++;\n    }\n  }\n\n  // Adding the new pizzas to the array\n  // It may run out of a room and not be able to place all the new pizzas\n  int pizzasActuallyAdded = 0;\n  for (int i = 0; i < this->maxPizzas && newPizzas > 0; i++){\n    // Looking for an empty pizza spot\n    if (this->pizzas[i].getSlicesLeft() == 0){\n      // Putting a new pizza in that spot\n      this->pizzas[i] = Pizza();\n      newPizzas--; // It has been placed\n      pizzasActuallyAdded++;\n    }\n  }\n\n  // New pizzas may still be greater than 0 if the PizzaStore ran out of\n  // room for the new pizza\n  return pizzasActuallyAdded;\n}\n\nbool PizzaStore::consumeSlices(int slices){\n\n  // Iterating through the pizzas until the order is satisfied\n  for (int i = 1; i < this->maxPizzas && slices > 0; i++){\n    // Removing slices while the order is still demanding more and\n    // the pizza has more slices to give\n    // Otherwise, it will move on to the pizza\n    while (this->pizzas[i].getSlicesLeft() > 0 && slices > 0){\n      slices--;\n      this->pizzas[i].removeSlice();\n    } \n  }\n  \n  // At this point, either all of the pizzas have been exhausted or the order\n  // is satisfied\n\n  if (slices > 0){\n    return false; // Order was not satisfied\n  }\n  return true;\n}\n\nstring PizzaStore::getName(){\n  return this->name;\n}\n\nint PizzaStore::getTotalSlicesLeft(){\n  int totalSlices = 0;\n  for (int i = 0; i < this->maxPizzas; i++){\n    totalSlices += this->pizzas[i].getSlicesLeft();\n  }\n  return totalSlices;\n}\n\nvoid PizzaStore::showStatus(){\n  cout << setw(20) << this->name << \": \";\n  for (int i = 0; i < this->maxPizzas; i++){\n    cout << this->pizzas[i].getSlicesLeft() << \" \";\n  }\n  cout << endl;\n}\n",
+        "source": "STUDENT_CODE",
+        "context": "Students code from PizzaStore.cpp",
+        "relevance": 1.0,
+        "metadata": {}
+    },
+    {
+        "content": "Umbrella: 4 8 8 8 8",
+        "source": "EXPECTED_PHRASE",
+        "context": "The expected slice counts from the test case",
+        "relevance": 1.0,
+        "metadata": {}
+    }
+]

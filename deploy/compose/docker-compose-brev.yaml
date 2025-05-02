@@ -280,6 +280,8 @@ services:
       MODEL_ID: TinyLlama/TinyLlama-1.1B-Chat-v1.0
       PORT: 80
       HUGGING_FACE_HUB_TOKEN: "${HUGGING_FACE_HUB_TOKEN}"
+      TRUST_REMOTE_CODE: "true"
+      TRUSTED_CLIENTS: "all"
     volumes:
       - ${MODEL_DIRECTORY:-./models}:/data
     deploy:

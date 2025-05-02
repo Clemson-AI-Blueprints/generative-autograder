@@ -24,6 +24,7 @@ from typing import Dict
 from typing import List
 from typing import Any
 from typing import Optional
+from typing import Union
 from urllib.parse import urlparse
 
 import requests
@@ -80,6 +81,9 @@ from langchain.llms.base import LLM  # noqa: E402  # pylint: disable=no-name-in-
 from langchain_core.documents.compressor import BaseDocumentCompressor  # noqa: E402
 from langchain_core.embeddings import Embeddings  # noqa: E402
 from langchain_core.language_models.chat_models import SimpleChatModel  # noqa: E402
+from langchain_core.runnables import Runnable
+from langchain_core.messages import BaseMessage
+from langchain_core.prompts.chat import ChatPromptValue
 from pymilvus import connections, utility, Collection
 
 try:
@@ -421,18 +425,22 @@ def delete_collections(vdb_endpoint: str, collection_names: List[str]) -> dict:
             "total_failed": len(collection_names)
         }
     
-class TGIWrapper(LLM):
+class TGIWrapper(Runnable):
     def __init__(self, url: str, model_name: str = "", **kwargs):
-        self.client = InferenceClient(model=f"http://{url}")
-        self.kwargs = kwargs
-        self.model_name = model_name
+        self._client = InferenceClient(model=url)
+        self._kwargs = kwargs
+        self._model_name = model_name
 
-    def _call(self, prompt: str, stop=None) -> str:
-        return self.client.text_generation(prompt, **self.kwargs)
+    def invoke(self, input: Union[str, ChatPromptValue], config: Dict[str, Any] = None) -> str:
+        # If input is a LangChain PromptValue (e.g., ChatPromptValue), convert it to a string
+        if isinstance(input, ChatPromptValue):
+            input = input.to_string()
+        elif isinstance(input, BaseMessage):  # for message-level chains
+            input = input.content
+        elif not isinstance(input, str):
+            raise TypeError(f"Unsupported input type: {type(input)}")
 
-    @property
-    def _llm_type(self) -> str:
-        return "huggingface-tgi"
+        return self._client.text_generation(input, **self._kwargs)
 
 @utils_cache
 @lru_cache()
