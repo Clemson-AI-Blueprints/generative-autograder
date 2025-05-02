@@ -5,6 +5,7 @@ useful prompt for the LLM model.
 
 import enum
 from typing import List, Dict
+from transformers import AutoTokenizer
 
 
 class HintSource(enum.Enum):
@@ -83,36 +84,29 @@ def process_element(hint_element: HintElement) -> str:
         return hint_element.content
 
 
+MAX_INPUT_TOKENS = 850
 
 def hint_elements_to_prompt(hint_element_dicts: List[Dict]) -> str:
-    hint_elements = [HintElement.from_dict(d) for d in hint_element_dicts]
-
-    prompt = (
-        "You are a helpful teaching assistant for an introductory programming class. "
-        "Your task is to write a short, constructive hint that guides a student toward solving their problem "
-        "without giving away the full answer.\n\n"
-        "Below are pieces of information about the student's submission:\n"
+    hint_elements = [HintElement.from_dict(hint_element_dict) for hint_element_dict in hint_element_dicts]
+    
+    system_prompt = (
+        "You are a helpful teaching assistant. "
+        "Use the information below to generate a hint for a student working on a programming assignment. "
+        "Avoid giving away the full answer. Instead, guide the student toward discovering the fix themselves.\n\n"
     )
 
-    for i, element in enumerate(hint_elements, 1):
-        source = element.source.name.replace("_", " ").title()
-        content = process_element(element).strip()
-        context = f"\nContext: {element.context.strip()}" if element.context else ""
-        prompt += f"\nElement {i}: ({source}){context}\n{content}\n"
+    body = ""
+    for i, hint_element in enumerate(hint_elements):
+        element_str = f"\n# Element {i + 1}\n"
+        element_str += f"## Content\n{process_element(hint_element)}\n"
+        element_str += f"## Source\n{hint_element.source.name}\n"
+        element_str += f"## Context\n{hint_element.context or ''}\n"
+        element_str += f"## Relevance\n{hint_element.relevance}\n"
 
-    # 2048 - 100 is the max tokens, enforce than the length of the prompt in characters is less than (2048 - 100) / 4
-    # 4 is the average number of tokens per character
+        # Check token length before appending
+        if len(system_prompt + body + element_str) * 4 > MAX_INPUT_TOKENS:
+            print("Warning: The prompt is too long. Truncating the hint elements.")
+            break
+        body += element_str
 
-    max_length = (1024 - 200) * 4
-    if len(prompt) > max_length:
-        prompt = prompt[:max_length]
-    prompt += "\n\nLength Truncated\n\n"
-
-
-    prompt += (
-        "\n---\n"
-        "Based on these elements, write a helpful hint for the student. "
-        "Avoid directly giving the answer, and instead guide them to identify or fix the issue themselves."
-    )
-
-    return prompt
+    return system_prompt + body + "\n<|user|>\nBased on these elements, write a hint.\n<|assistant|>"
