@@ -1110,9 +1110,8 @@ async def generate_hint(_: Request, hint_prompt: HintOnlyPrompt) -> StreamingRes
 
         system_prompt = (
             "You are a helpful teaching assistant. "
-            "Your goal is to generate a specific, constructive, and concise hint that helps the student make progress "
-            "on their assignment without giving away the answer. "
-            "Use the provided elements as context. Focus on what might be confusing or commonly misunderstood.\n"
+            "Use the information below to generate a hint for a student working on a programming assignment. "
+            "Avoid giving away the full answer. Instead, guide the student toward discovering the fix themselves.\n\n"
         )
 
         formatted_prompt = f"<|system|>\n{system_prompt}\n<|user|>\n{hint_context.strip()}\n<|assistant|>"
