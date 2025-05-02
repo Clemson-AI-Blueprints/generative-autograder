@@ -106,4 +106,12 @@ def hint_elements_to_prompt(hint_element_dicts: List[Dict]) -> str:
         "Avoid directly giving the answer, and instead guide them to identify or fix the issue themselves."
     )
 
+    # 2048 - 100 is the max tokens, enforce than the length of the prompt in characters is less than (2048 - 100) / 4
+    # 4 is the average number of tokens per character
+
+    max_length = (2048 - 500) * 4
+    if len(prompt) > max_length:
+        prompt = prompt[:max_length]
+    prompt += "\n\nLength Truncated\n\n"
+
     return prompt
